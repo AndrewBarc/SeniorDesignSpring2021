@@ -1,16 +1,3 @@
-// FFT Test
-//
-// Compute a 1024 point Fast Fourier Transform (spectrum analysis)
-// on audio connected to the Left Line-In pin.  By changing code,
-// a synthetic sine wave can be input instead.
-//
-// The first 40 (of 512) frequency analysis bins are printed to
-// the Arduino Serial Monitor.  Viewing the raw data can help you
-// understand how the FFT works and what results to expect when
-// using the data to control LEDs, motors, or other fun things!
-//
-// This example code is in the public domain.
-
 #include <Audio.h>
 #include <Wire.h>
 #include <SPI.h>
@@ -50,6 +37,10 @@ Adafruit_NeoPixel strip = Adafruit_NeoPixel(N_LEDS,PIN, NEO_GRB + NEO_KHZ800);
   uint32_t BlueD5 = strip.ColorHSV(43690,255,16);
   uint32_t BlueD6 = strip.ColorHSV(43690,255,8);    
 
+     
+    uint32_t Orange = strip.Color(255,128,0);
+    uint32_t Yellow = strip.Color(255,255,0);
+    uint32_t Purple = strip.Color(130,0,255);
 const int myInput = AUDIO_INPUT_LINEIN;
 //const int myInput = AUDIO_INPUT_MIC;
 
@@ -59,11 +50,14 @@ const int myInput = AUDIO_INPUT_LINEIN;
 AudioInputI2S          audioInput;         // audio shield: mic or line-in
 AudioSynthWaveformSine sinewave;
 AudioAnalyzeFFT1024    myFFT;
+AudioAnalyzeFFT1024    myFFT1;
 AudioOutputI2S         audioOutput;        // audio shield: headphones & line-out
 
 // Connect either the live input or synthesized sine wave
 AudioConnection patchCord1(audioInput, 0, myFFT, 0);
 AudioConnection patchCord2(audioInput, 0, audioOutput,0);
+AudioConnection patchCord3(audioInput, 1, audioOutput,1);
+AudioConnection patchCord4(audioInput, 1, myFFT1,1);
 //AudioConnection patchCord1(sinewave, 0, myFFT, 0);
 
 AudioControlSGTL5000 audioShield;
@@ -90,16 +84,19 @@ void setup() {
   //LEDS
   strip.begin();
   strip.show();
-  strip.setBrightness(45);
+  strip.setBrightness(50);
 
   Serial.begin(9600);
 }
 
 void loop() {
-  //pulse();
+  veryfastft(myFFT);
+  }
+
+void veryfastft(AudioAnalyzeFFT1024 myFFT){
   float n;
   int i;
-  float fft [40];
+  float fft [500];
   float subbass = 0;
   float bass = 0;
   float lower_midrange = 0;
@@ -107,12 +104,10 @@ void loop() {
   float higher_midrange = 0;
   float presence = 0;
   float brillance = 0;
-
+  
   if (myFFT.available()) {
-    // each time new FFT data is available
-    // print it all to the Arduino Serial Monitor
     Serial.print("FFT: ");
-    for (i=0; i<40; i++) {
+    for (i=0; i<500; i++) {
       n = myFFT.read(i);
       if (n >= 0.01) {
         fft[i] = n;
@@ -125,11 +120,18 @@ void loop() {
         else if( i >= 7 and i <13){
           lower_midrange = n + lower_midrange;
         }
-        else if( i >=13 and i <41){
+        else if( i >=13 and i <49){
           midrange = n + midrange;
         }
-        //Serial.print(n);
-        //Serial.print(" ");
+        else if( i >=49 and i <100){
+          higher_midrange = n + higher_midrange;
+        }
+        else if( i >=100 and i <150){
+          presence = n + presence;
+        }
+        else if( i >=150 and i <501){
+          brillance = n + brillance;
+        }
       } 
       else {
         fft[i] = 0;
@@ -142,32 +144,29 @@ void loop() {
         else if( i >= 7 and i <13){
           lower_midrange = n + lower_midrange;
         }
-        else if( i >=13 and i <41){
+        else if( i >=13 and i <49){
           midrange = n + midrange;
         }
-        //Serial.print("  -  "); // don't print "0.00"
+        else if( i >=50 and i <100){
+          higher_midrange = n + higher_midrange;
+        }
+        else if( i >=100 and i <150){
+          presence = n + presence;
+        }
+        else if( i >=150 and i <501){
+          brillance = n + brillance;
+        }
       }
       
     }
-    mainpulse(subbass,bass,lower_midrange,midrange);
+    //mainpulse(subbass,bass,lower_midrange,midrange);
+      range(subbass,bass,lower_midrange,midrange,higher_midrange,presence,brillance); 
+      //range5(subbass,bass,lower_midrange,midrange,higher_midrange,presence,brillance);
   }
-    Serial.println();
   }
 void mainpulse(float subbass, float bass, float lower_midrange, float midrange){
-      Serial.println();
-      Serial.print("SubBass: ");
-      Serial.print(subbass);
-      Serial.println();
-      Serial.print("Bass: ");
-      Serial.print(bass);
-      Serial.println();
-      Serial.print("Lower Midrange: ");
-      Serial.print(lower_midrange);
-      Serial.println();
-      Serial.print("Midrange: ");
-      Serial.print(midrange);
-      Serial.println();
-          if (subbass < bass and subbass > lower_midrange and subbass > midrange){
+      
+    if (subbass < bass and subbass > lower_midrange and subbass > midrange){
       pulse();
       delay(10);
     }
@@ -177,9 +176,6 @@ void mainpulse(float subbass, float bass, float lower_midrange, float midrange){
     }    
     else if(midrange <= 0.10){
       strip.clear();
-      Serial.println();
-      Serial.print("AAAAAAAAAAAAAAAAAAAAAAAA");
-      Serial.println();
       strip.show();
     }
     else if (lower_midrange > bass and lower_midrange > subbass and lower_midrange > midrange){
@@ -191,10 +187,198 @@ void mainpulse(float subbass, float bass, float lower_midrange, float midrange){
     }
 }
 
-void range(float fft[40]){
-  
+void range(float subbass, float bass, float lower_midrange, float midrange, float higher_midrange,float presence,float brillance){
+  bass = bass+subbass;
+  if(bass > .1 and bass < .3){
+    strip.setPixelColor(2,Red);
+  }
+  else if(bass >= .3 and bass < .6){
+    strip.setPixelColor(1,Red);
+    strip.setPixelColor(2,Red);
+    strip.setPixelColor(3,Red);
+  }
+  else if(bass >= .6){
+    strip.setPixelColor(0,Red);
+    strip.setPixelColor(1,Red);
+    strip.setPixelColor(2,Red);
+    strip.setPixelColor(3,Red);
+    strip.setPixelColor(4,Red);
+  }
+  if(lower_midrange > .1 and lower_midrange < .3){
+    strip.setPixelColor(7,Orange);
+  }
+  else if(lower_midrange >= .3 and lower_midrange < .45){
+    strip.setPixelColor(6,Orange);
+    strip.setPixelColor(7,Orange);
+    strip.setPixelColor(8,Orange);
+  }
+  else if(lower_midrange >= .45){
+    strip.setPixelColor(5,Orange);
+    strip.setPixelColor(6,Orange);
+    strip.setPixelColor(7,Orange);
+    strip.setPixelColor(8,Orange);
+    strip.setPixelColor(9,Orange);
+  }
+  if(midrange > .1 and midrange <.3){
+    strip.setPixelColor(12,Yellow);
+  }
+  else if(midrange >= .3 and midrange < .45){
+    strip.setPixelColor(11,Yellow);
+    strip.setPixelColor(12,Yellow);
+    strip.setPixelColor(13,Yellow);
+  }
+  else if(midrange >= .45){
+    strip.setPixelColor(10,Yellow);
+    strip.setPixelColor(11,Yellow);
+    strip.setPixelColor(12,Yellow);
+    strip.setPixelColor(13,Yellow);
+    strip.setPixelColor(14,Yellow);
+  }
+    if(higher_midrange > .1 and higher_midrange <.3){
+    strip.setPixelColor(17,Green);
+  }
+  else if(higher_midrange >= .3 and higher_midrange < .45){
+    strip.setPixelColor(16,Green);
+    strip.setPixelColor(17,Green);
+    strip.setPixelColor(18,Green);
+  }
+  else if(higher_midrange >= .45){
+    strip.setPixelColor(15,Green);
+    strip.setPixelColor(16,Green);
+    strip.setPixelColor(17,Green);
+    strip.setPixelColor(18,Green);
+    strip.setPixelColor(19,Green);
+  }
+      if(presence > .1 and presence <.3){
+    strip.setPixelColor(22,Blue);
+  }
+  else if(presence >= .3 and presence < .45){
+    strip.setPixelColor(21,Blue);
+    strip.setPixelColor(22,Blue);
+    strip.setPixelColor(23,Blue);
+  }
+  else if(presence >= .45){
+    strip.setPixelColor(20,Blue);
+    strip.setPixelColor(21,Blue);
+    strip.setPixelColor(22,Blue);
+    strip.setPixelColor(23,Blue);
+    strip.setPixelColor(24,Blue);
+  }
+    if(brillance > .1 and brillance < .3){
+    strip.setPixelColor(27,Purple);
+  }
+  else if(brillance >= .3 and presence < .46){
+    strip.setPixelColor(26,Purple);
+    strip.setPixelColor(27,Purple);
+    strip.setPixelColor(28,Purple);
+  }
+  else if(brillance >= .46){
+    strip.setPixelColor(25,Purple);
+    strip.setPixelColor(26,Purple);
+    strip.setPixelColor(27,Purple);
+    strip.setPixelColor(28,Purple);
+    strip.setPixelColor(29,Purple);
+  }
+  strip.show();
+  strip.clear();
 }
+void range5(float subbass, float bass, float lower_midrange, float midrange, float higher_midrange,float presence,float brillance){
+  bass = bass+subbass;
+  midrange = midrange + lower_midrange;
+  if(bass > .1 and bass < .3){
+    strip.setPixelColor(2,Red);
+  strip.setPixelColor(3,Red);
+  }
+  else if(bass >= .3 and bass < .6){
+    strip.setPixelColor(1,Red);
+    strip.setPixelColor(2,Red);
+    strip.setPixelColor(3,Red);
+  strip.setPixelColor(4,Red);
+  }
+  else if(bass >= .6){
+    strip.setPixelColor(0,Red);
+    strip.setPixelColor(1,Red);
+    strip.setPixelColor(2,Red);
+    strip.setPixelColor(3,Red);
+    strip.setPixelColor(4,Red);
+  strip.setPixelColor(5,Red);
+  }
 
+  if(midrange > .1 and midrange <.3){
+    strip.setPixelColor(8,Yellow);
+  strip.setPixelColor(9,Yellow);
+  }
+  else if(midrange >= .3 and midrange < .45){
+    strip.setPixelColor(7,Yellow);
+    strip.setPixelColor(8,Yellow);
+    strip.setPixelColor(9,Yellow);
+  strip.setPixelColor(10,Yellow);
+  }
+  else if(midrange >= .45){
+    strip.setPixelColor(6,Yellow);
+    strip.setPixelColor(7,Yellow);
+    strip.setPixelColor(8,Yellow);
+    strip.setPixelColor(9,Yellow);
+    strip.setPixelColor(10,Yellow);
+  strip.setPixelColor(11,Yellow);
+  }
+    if(higher_midrange > .1 and higher_midrange <.3){
+    strip.setPixelColor(14,Green);
+  strip.setPixelColor(15,Green);
+  }
+  else if(higher_midrange >= .3 and higher_midrange < .45){
+    strip.setPixelColor(13,Green);
+    strip.setPixelColor(14,Green);
+    strip.setPixelColor(15,Green);
+  strip.setPixelColor(16,Green);
+  }
+  else if(higher_midrange >= .45){
+    strip.setPixelColor(12,Green);
+    strip.setPixelColor(13,Green);
+    strip.setPixelColor(14,Green);
+    strip.setPixelColor(15,Green);
+    strip.setPixelColor(16,Green);
+  strip.setPixelColor(17,Green);
+  }
+      if(presence > .1 and presence <.3){
+    strip.setPixelColor(21,Blue);
+  strip.setPixelColor(20,Blue);
+  }
+  else if(presence >= .3 and presence < .45){
+    strip.setPixelColor(19,Blue);
+  strip.setPixelColor(20,Blue);
+  strip.setPixelColor(21,Blue);
+    strip.setPixelColor(22,Blue);
+  }
+  else if(presence >= .45){
+  strip.setPixelColor(18,Blue);
+  strip.setPixelColor(19,Blue);  
+    strip.setPixelColor(20,Blue);
+    strip.setPixelColor(21,Blue);
+    strip.setPixelColor(22,Blue);
+    strip.setPixelColor(23,Blue);
+  }
+    if(brillance > .1 and brillance < .3){
+    strip.setPixelColor(26,Purple);
+  strip.setPixelColor(27,Purple);
+  }
+  else if(brillance >= .3 and presence < .46){
+    strip.setPixelColor(25,Purple);
+  strip.setPixelColor(26,Purple);
+    strip.setPixelColor(27,Purple);
+    strip.setPixelColor(28,Purple);
+  }
+  else if(brillance >= .46){
+    strip.setPixelColor(24,Purple);
+  strip.setPixelColor(25,Purple);
+    strip.setPixelColor(26,Purple);
+    strip.setPixelColor(27,Purple);
+    strip.setPixelColor(28,Purple);
+    strip.setPixelColor(29,Purple);
+  }
+  strip.show();
+  strip.clear();
+}
 void pulse(){
     for (int i = 0; i < N_LEDS+8; i++){
     strip.setPixelColor(i, Red);
